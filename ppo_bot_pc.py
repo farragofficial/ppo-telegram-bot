@@ -8,7 +8,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import telebot
 from fpdf import FPDF
-from io import BytesIO
 import time
 
 # توكن البوت من متغير البيئة
@@ -41,14 +40,16 @@ def save_data():
         json.dump(car_data, f, ensure_ascii=False, indent=2)
 
 # دالة لإنشاء PDF من Screenshot
-def create_pdf(screenshot_bytes):
+def create_pdf(screenshot_bytes, filename="screenshot.pdf"):
+    tmp_img = "tmp_screenshot.png"
+    with open(tmp_img, "wb") as f:
+        f.write(screenshot_bytes)
+
     pdf = FPDF()
     pdf.add_page()
-    pdf.image(BytesIO(screenshot_bytes), x=10, y=10, w=190)
-    pdf_output = BytesIO()
-    pdf.output(pdf_output)
-    pdf_output.seek(0)
-    return pdf_output
+    pdf.image(tmp_img, x=10, y=10, w=190)
+    pdf.output(filename)
+    return filename
 
 # بدء المحادثة مع المستخدم
 @bot.message_handler(commands=['start'])
@@ -71,13 +72,13 @@ def handle_plate(message):
         return
 
     # لو جديد، نطلب باقي البيانات
-    msg = bot.send_message(message.chat.id, "ابعتي الحروف (3 خانات) والرقم (خانة رقمية): مثال: ميف 1234567890")
+    msg = bot.send_message(message.chat.id, "ابعتي الحروف (3 خانات) والرقم (خانة رقمية) والرقم القومي ورقم الهاتف، مثال: ميف 12345 12345678901234 01012345678")
     bot.register_next_step_handler(msg, fill_data, plate)
 
 def fill_data(message, plate):
     parts = message.text.strip().split()
     if len(parts) < 4:
-        bot.reply_to(message, "خطأ: ابعتي 3 حروف + الرقم القومي + رقم الهاتف.")
+        bot.reply_to(message, "خطأ: ابعتي 3 حروف + الرقم + الرقم القومي + رقم الهاتف.")
         return
 
     letter1, letter2, letter3 = parts[0][0], parts[0][1], parts[0][2]
@@ -122,7 +123,8 @@ def fill_data(message, plate):
         pdf_file = create_pdf(screenshot_bytes)
 
         # إرسال PDF للمستخدم
-        bot.send_document(message.chat.id, pdf_file, caption=f"تفاصيل المخالفات للوحة {plate}")
+        with open(pdf_file, "rb") as f:
+            bot.send_document(message.chat.id, f, caption=f"تفاصيل المخالفات للوحة {plate}")
 
         # حفظ البيانات محلياً
         car_data[plate] = {
